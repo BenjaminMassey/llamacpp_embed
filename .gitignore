@@ -1,0 +1,5 @@
+target/
+/llama-model/*.gguf
+/llama-windows
+/llama-linux
+/deployments
