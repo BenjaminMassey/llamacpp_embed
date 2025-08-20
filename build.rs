@@ -52,7 +52,7 @@ fn get_llama_names() -> (String, String) {
         "llama-linux".into(),
         "https://github.com/ggml-org/llama.cpp/releases/download/b6209/llama-b6209-bin-ubuntu-vulkan-x64.zip".into(),
     )
-} // TODO: untested
+}
 
 fn get_llama_cpp() {
     let (dir_name, zip_url) = get_llama_names();
