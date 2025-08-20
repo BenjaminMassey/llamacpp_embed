@@ -16,9 +16,12 @@ fn llama_cli_path() -> String {
 #[cfg(not(target_os = "windows"))]
 fn llama_cli_path() -> String {
     "./llama-linux/llama-cli".to_owned()
-}
+} // TODO: untested
 
 pub fn start(gguf_path: &str) -> LlamaEmbedModel {
+    if !std::path::Path::new(gguf_path).exists() {
+        panic!("Model not found: \"{}\".", gguf_path);
+    }
     let mut child = Command::new(&std::path::Path::new(&llama_cli_path()).to_str().unwrap())
         .args(&["-m", gguf_path])
         .stdin(Stdio::piped())
