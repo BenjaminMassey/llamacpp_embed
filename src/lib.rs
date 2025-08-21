@@ -18,14 +18,14 @@ fn llama_cli_path() -> String {
     "./llama-linux/build/bin/llama-cli".to_owned()
 }
 
-pub fn start(gguf_path: &str) -> LlamaEmbedModel {
+pub fn start(gguf_path: &str, system_prompt: &str) -> LlamaEmbedModel {
     if !std::path::Path::new(gguf_path).exists() {
         panic!("Model not found: \"{}\".", gguf_path);
     }
     
     #[cfg(target_os = "windows")]
     let mut child = Command::new(&std::path::Path::new(&llama_cli_path()).to_str().unwrap())
-        .args(&["-m", gguf_path])
+        .args(&["-m", gguf_path, "-sys", system_prompt])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -33,7 +33,7 @@ pub fn start(gguf_path: &str) -> LlamaEmbedModel {
         .unwrap();
     #[cfg(not(target_os = "windows"))]
     let mut child = Command::new(&std::path::Path::new(&llama_cli_path()).to_str().unwrap())
-        .args(&["-m", gguf_path, "-i", "--simple-io"])
+        .args(&["-m", gguf_path, "-sys", system_prompt, "-i", "--simple-io"])
         .env("TERM", "dumb")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -41,7 +41,7 @@ pub fn start(gguf_path: &str) -> LlamaEmbedModel {
         .spawn()
         .unwrap();
     
-    let mut stdin = child.stdin.take().unwrap();
+    let stdin = child.stdin.take().unwrap();
     let stdout = child.stdout.take().unwrap();
     
     let (tx, rx) = mpsc::channel::<u8>();
@@ -58,11 +58,8 @@ pub fn start(gguf_path: &str) -> LlamaEmbedModel {
         }
     }); // TODO: do we need to kill this?
     
-    // dummy message in order to wait for model loading text plus flush the chat
-    send_command(&mut stdin, "respond only with the text 'hello'. /no_think");
-    for _ in 0..2 { // TODO: ew, why?
-        read_response(&rx, std::time::Duration::from_secs(2), false);
-    }
+    // wait for model loading text
+    let _ = read_response(&rx);
 	
     LlamaEmbedModel {
         program: child,
@@ -73,7 +70,7 @@ pub fn start(gguf_path: &str) -> LlamaEmbedModel {
 
 pub fn chat(model: &mut LlamaEmbedModel, prompt: &str) -> String {
     send_command(&mut model.input, prompt);
-    read_response(&model.receiver, std::time::Duration::from_secs(0), true)
+    read_response(&model.receiver)
 }
 
 pub fn stop(model: &mut LlamaEmbedModel) {
@@ -86,33 +83,39 @@ fn send_command(stdin: &mut std::process::ChildStdin, command: &str) {
     stdin.flush().unwrap();
 }
 
-fn read_response(rx: &mpsc::Receiver<u8>, idle_timeout: std::time::Duration, cli_break: bool) -> String {
+fn read_response(rx: &mpsc::Receiver<u8>) -> String {
+    let timeout = std::time::Duration::from_secs(10);
+    #[cfg(target_os = "windows")]
+    let target_count = 4; // windows has CR
+    #[cfg(not(target_os = "windows"))]
+    let target_count = 3; // no CR on linux
     let mut buffer = Vec::new();
     loop {
-        match rx.recv_timeout(idle_timeout) {
+        match rx.recv_timeout(timeout) {
             Ok(byte) => {
                 buffer.push(byte);
-                if cli_break && buffer.len() >= 3 &&
-                    buffer[buffer.len() - 1] == 32 && // space
-                    buffer[buffer.len() - 2] == 62 && // >
-                    buffer[buffer.len() - 3] == 10 // LF
-                {
-                    break
+                if buffer.len() >= target_count {
+                    #[cfg(target_os = "windows")]
+                    let extra = buffer[buffer.len() - 4] == 13; // CR
+                    #[cfg(not(target_os = "windows"))]
+                    let extra = true; // no CR on linux
+                    if buffer[buffer.len() - 1] == 32 && // space
+                        buffer[buffer.len() - 2] == 62 && // >
+                        buffer[buffer.len() - 3] == 10 && // LF
+                        extra 
+                    {
+                        break
+                    }
                 }
             },
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                if !cli_break && buffer.len() >= 3 {
-                    break
-                }
-            },
-            Err(_) => {
-                if buffer.len() >= 3 {
-                    break
-                }
-            },
+            Err(mpsc::RecvTimeoutError::Timeout) => break,
+            Err(_) => break,
         }
     }
-    remove_think_tag(String::from_utf8_lossy(&buffer[..buffer.len() - 3]).trim())
+    if buffer.len() >= target_count {
+        return remove_think_tag(String::from_utf8_lossy(&buffer[..buffer.len() - target_count]).trim());
+    }
+    "!FAILURE!".to_owned() // TODO: better, probably -> Option<String> or similar
 }
 
 fn remove_think_tag(text: &str) -> String {
