@@ -30,12 +30,18 @@ fn download_file(url: &str, output: &str) {
 fn get_project_directory() -> String {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     Path::new(&out_dir)
-        .parent().unwrap()
-        .parent().unwrap()
-        .parent().unwrap()
-        .parent().unwrap()
-        .parent().unwrap()
-        .to_str().unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_str()
+        .unwrap()
         .to_owned()
 }
 
@@ -50,10 +56,11 @@ fn get_llama_names() -> (String, String) {
 fn get_llama_names() -> (String, String) {
     (
         "llama-linux".into(),
-        "https://github.com/ggml-org/llama.cpp/releases/download/b6209/llama-b6209-bin-ubuntu-vulkan-x64.zip".into(),
+        "https://github.com/ggml-org/llama.cpp/releases/download/b8913/llama-b8913-bin-ubuntu-vulkan-x64.tar.gz".into(),
     )
 }
 
+#[cfg(target_os = "windows")]
 fn get_llama_cpp() {
     let (dir_name, zip_url) = get_llama_names();
     let target_dir = get_project_directory();
@@ -69,6 +76,27 @@ fn get_llama_cpp() {
     let mut archive = zip::ZipArchive::new(file).unwrap();
     archive.extract(output_dir).unwrap();
     std::fs::remove_file(&output_zip).unwrap();
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_llama_cpp() {
+    use tar::Archive;
+
+    let (dir_name, tar_url) = get_llama_names();
+    let target_dir = get_project_directory();
+    let target_path = Path::new(&target_dir);
+    let output_dir = target_path.join(&dir_name);
+    if output_dir.exists() {
+        return;
+    }
+    download_file(&tar_url, "llama-cpp.tar.gz");
+    let output_tar = target_path.join("llama-cpp.tar.gz");
+    std::fs::create_dir_all(&output_dir).unwrap();
+    let file = std::fs::File::open(&output_tar).unwrap();
+    let gz = flate2::read::GzDecoder::new(file);
+    let mut archive = Archive::new(gz);
+    archive.unpack(output_dir).unwrap();
+    std::fs::remove_file(&output_tar).unwrap();
 }
 
 fn make_model_folder() {

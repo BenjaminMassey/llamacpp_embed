@@ -1,127 +1,64 @@
-use std::process::{Command, Stdio};
-use std::io::{BufReader, Read, Write};
-use std::sync::mpsc::{self, Receiver};
-use std::thread;
+mod llama;
 
 pub struct LlamaEmbedModel {
     program: std::process::Child,
-    input: std::process::ChildStdin,
-    receiver: Receiver<u8>,
+    system_prompt: String,
 }
 
 #[cfg(target_os = "windows")]
 fn llama_cli_path() -> String {
-    "./llama-windows/llama-cli.exe".to_owned()
+    "./llama-windows/llama-b8913/llama-server.exe".to_owned()
 }
 #[cfg(not(target_os = "windows"))]
 fn llama_cli_path() -> String {
-    "./llama-linux/build/bin/llama-cli".to_owned()
+    "./llama-linux/llama-b8913/llama-server".to_owned()
 }
+// TODO: paths should be more unified and not with subfolder weirdness
 
-pub fn start(gguf_path: &str, system_prompt: &str) -> LlamaEmbedModel {
+pub fn start(
+    gguf_path: &str,
+    system_prompt: &str,
+    load_timeout: u64,
+) -> Result<LlamaEmbedModel, Box<dyn std::error::Error>> {
     if !std::path::Path::new(gguf_path).exists() {
-        panic!("Model not found: \"{}\".", gguf_path);
+        return Err(format!("Model not found: \"{}\".", gguf_path).into());
     }
-    
-    #[cfg(target_os = "windows")]
-    let mut child = Command::new(&std::path::Path::new(&llama_cli_path()).to_str().unwrap())
-        .args(&["-m", gguf_path, "-sys", system_prompt])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    #[cfg(not(target_os = "windows"))]
-    let mut child = Command::new(&std::path::Path::new(&llama_cli_path()).to_str().unwrap())
-        .args(&["-m", gguf_path, "-sys", system_prompt, "-i", "--simple-io"])
-        .env("TERM", "dumb")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    
-    let stdin = child.stdin.take().unwrap();
-    let stdout = child.stdout.take().unwrap();
-    
-    let (tx, rx) = mpsc::channel::<u8>();
-    let _ = thread::spawn(move || {
-        let mut reader = BufReader::new(stdout);
-        let mut buffer = [0u8; 1];
-        while let Ok(n) = reader.read(&mut buffer) {
-            if n == 0 {
-                break;
-            }
-            if tx.send(buffer[0]).is_err() {
-                break;
-            }
-        }
-    }); // TODO: do we need to kill this?
-    
-    // wait for model loading text
-    let _ = read_response(&rx);
-	
-    LlamaEmbedModel {
-        program: child,
-        input: stdin,
-        receiver: rx
-    }
-}
 
-pub fn chat(model: &mut LlamaEmbedModel, prompt: &str) -> String {
-    send_command(&mut model.input, prompt);
-    read_response(&model.receiver)
-}
+    let log = std::fs::File::create("llamacpp_log.txt").unwrap();
+    let program =
+        std::process::Command::new(&std::path::Path::new(&llama_cli_path()).to_str().unwrap())
+            .args(&["-m", gguf_path, "--port", "8080"])
+            .stdout(log.try_clone().unwrap())
+            .stderr(log)
+            .spawn()?;
 
-pub fn stop(model: &mut LlamaEmbedModel) {
-    model.program.kill().unwrap();
-    model.program.wait().unwrap();
-}
-
-fn send_command(stdin: &mut std::process::ChildStdin, command: &str) {
-    writeln!(stdin, "{}", command).unwrap();
-    stdin.flush().unwrap();
-}
-
-fn read_response(rx: &mpsc::Receiver<u8>) -> String {
-    let timeout = std::time::Duration::from_secs(10);
-    #[cfg(target_os = "windows")]
-    let target_count = 4; // windows has CR
-    #[cfg(not(target_os = "windows"))]
-    let target_count = 3; // no CR on linux
-    let mut buffer = Vec::new();
-    loop {
-        match rx.recv_timeout(timeout) {
-            Ok(byte) => {
-                buffer.push(byte);
-                if buffer.len() >= target_count {
-                    #[cfg(target_os = "windows")]
-                    let extra = buffer[buffer.len() - 4] == 13; // CR
-                    #[cfg(not(target_os = "windows"))]
-                    let extra = true; // no CR on linux
-                    if buffer[buffer.len() - 1] == 32 && // space
-                        buffer[buffer.len() - 2] == 62 && // >
-                        buffer[buffer.len() - 3] == 10 && // LF
-                        extra 
-                    {
-                        break
-                    }
-                }
-            },
-            Err(mpsc::RecvTimeoutError::Timeout) => break,
-            Err(_) => break,
+    let load_start = std::time::Instant::now();
+    while !llama::is_ready() {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        if std::time::Instant::now()
+            .duration_since(load_start)
+            .as_secs()
+            >= load_timeout
+        {
+            return Err(format!("Reached \"load_timeout\" of {}.", load_timeout).into());
         }
     }
-    if buffer.len() >= target_count {
-        return remove_think_tag(String::from_utf8_lossy(&buffer[..buffer.len() - target_count]).trim());
-    }
-    "!FAILURE!".to_owned() // TODO: better, probably -> Option<String> or similar
+
+    Ok(LlamaEmbedModel {
+        program,
+        system_prompt: system_prompt.to_owned(),
+    })
 }
 
-fn remove_think_tag(text: &str) -> String {
-    let tag = "</think>";
-    match text.find(tag) {
-        Some(index) => text[(index + tag.len())..].trim().to_string(),
-        None => text.to_string(),
-    }
+pub fn chat(
+    model: &mut LlamaEmbedModel,
+    prompt: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    llama::chat(&model.system_prompt, prompt)
+}
+
+pub fn stop(model: &mut LlamaEmbedModel) -> Result<(), Box<dyn std::error::Error>> {
+    model.program.kill()?;
+    model.program.wait()?;
+    Ok(())
 }

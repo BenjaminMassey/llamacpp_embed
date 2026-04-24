@@ -15,14 +15,19 @@ llamacpp_embed = { git = "https://www.github.com/BenjaminMassey/llamacpp_embed" 
 
 ```rust
 fn main() {
-    let mut model = llamacpp_embed::start("./llama-model/model.gguf");
+    let mut model = llamacpp_embed::start(
+        "./llama-model/model.gguf",
+        "You are a helpful assistant.",
+        30, // load timeout
+    )
+    .unwrap();
     let prompt = "How can I write \"Hello, World!\" in Rust?";
     println!(
-        "{}\n\n=>\n\n{}",
+        "{}\n\n=>\n\n{:?}",
         prompt,
         &llamacpp_embed::chat(&mut model, prompt),
     );
-    llamacpp_embed::stop(&mut model);
+    llamacpp_embed::stop(&mut model).unwrap();
 }
 ```
 
