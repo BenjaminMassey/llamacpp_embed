@@ -34,7 +34,7 @@ fn main() {
 
 ## Additional Notes
 
-The first `cargo build` for your project may take quite a while: `llamacpp_embed` will download runnable binaries into your project. It will place the llama.cpp runtime in a folder `llama-windows` or `llama-linux`, depending on your system. It will also create a folder `llama-model` where you can place your GGUF model file, which will be used for deployments.
+The first `cargo build` for your project may take quite a while: `llamacpp_embed` will download runnable binaries into your project. It will place the llama.cpp runtime in a folder `llama-cpp`. It will also create a folder `llama-model` where you can place your GGUF model file, which will be used for deployments.
 
 In order to package your program, you can run copied-in `deploy-win.bat` or `deploy-lin.sh` scripts. These will create a `deployments` folder in your project's folder, in which there will be subfolders for `windows` and `linux`. Builds will be their own folders within these, which will be named along the structure of `build_<DATE>_<TIME>`. Note that depending on specifics to your software, you may have additional steps to make sure your deployed version has access to all necessary resources: this is only covering `llamacpp_embed` files.
 
