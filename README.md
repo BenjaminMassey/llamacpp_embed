@@ -1,7 +1,7 @@
 # llamacpp_embed
-Copyright &copy; 2025 Benjamin Massey (Version 0.1.0)
+Copyright &copy; 2026 Benjamin Massey (Version 0.1.0)
 
-`llamacpp_embed`: a library for bundling llama.cpp runtime into rust projects
+`llamacpp_embed`: a library for bundling and using llama.cpp server runtime in rust projects
 
 ## Example
 
@@ -17,6 +17,7 @@ llamacpp_embed = { git = "https://www.github.com/BenjaminMassey/llamacpp_embed" 
 fn main() {
     let mut model = llamacpp_embed::start(
         "./llama-model/model.gguf",
+        None, // optional mmproj path for image usage
         "You are a helpful assistant.",
         30, // load timeout
     )
@@ -35,6 +36,10 @@ fn main() {
 
 The first `cargo build` for your project may take quite a while: `llamacpp_embed` will download runnable binaries into your project. It will place the llama.cpp runtime in a folder `llama-windows` or `llama-linux`, depending on your system. It will also create a folder `llama-model` where you can place your GGUF model file, which will be used for deployments.
 
-A current limitation is that for [llama.cpp binary releases](https://github.com/ggml-org/llama.cpp/releases/tag/b6209) there is separation by graphics backend. I am unsure if the one labeled CUDA - used for Windows - actually properly defaults to Vulkan or CPU as needed. There also are only Linux binaries labeled "Ubuntu", so I am unsure about usage on other distros, but even worse there is only a Vulkan release, so CUDA is not currently possible on Linux via this crate. Much to be thought about...
-
 In order to package your program, you can run copied-in `deploy-win.bat` or `deploy-lin.sh` scripts. These will create a `deployments` folder in your project's folder, in which there will be subfolders for `windows` and `linux`. Builds will be their own folders within these, which will be named along the structure of `build_<DATE>_<TIME>`. Note that depending on specifics to your software, you may have additional steps to make sure your deployed version has access to all necessary resources: this is only covering `llamacpp_embed` files.
+
+## Copyright
+
+This project was created and maintained by Benjamin Massey (benjamin.w.massey@gmail.com).
+
+It is protected under [the MIT license](https://opensource.org/license/mit) of which there is a copy in `LICENSE.md`.
