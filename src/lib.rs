@@ -7,13 +7,12 @@ pub struct LlamaEmbedModel {
 
 #[cfg(target_os = "windows")]
 fn llama_cli_path() -> String {
-    "./llama-windows/llama-b8913/llama-server.exe".to_owned()
+    "./llama-cpp/llama-server.exe".to_owned()
 }
 #[cfg(not(target_os = "windows"))]
 fn llama_cli_path() -> String {
-    "./llama-linux/llama-b8913/llama-server".to_owned()
+    "./llama-cpp/llama-server".to_owned()
 }
-// TODO: paths should be more unified and not with subfolder weirdness
 
 pub fn start(
     gguf_path: &str,

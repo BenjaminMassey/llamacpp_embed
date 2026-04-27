@@ -3,3 +3,4 @@ target/
 /llama-windows
 /llama-linux
 /deployments
+/llama-cpp

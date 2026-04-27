@@ -3,28 +3,103 @@ use std::io::Write;
 use std::path::Path;
 
 fn main() {
-    get_llama_cpp();
+    let url = get_release_url().unwrap();
+    get_llama_cpp(&url);
     make_model_folder();
     copy_deploy_scripts();
     inject_gitignore();
     println!("cargo:rerun-if-changed=*");
 }
 
-fn download_file(url: &str, output: &str) {
+#[cfg(target_os = "windows")]
+fn get_release_url() -> Result<String, Box<dyn std::error::Error>> {
+    release_url(&vec![
+        "win".to_owned(),
+        "vulkan".to_owned(),
+        "x64".to_owned(),
+    ])
+}
+#[cfg(not(target_os = "windows"))]
+fn get_release_url() -> Result<String, Box<dyn std::error::Error>> {
+    release_url(&vec![
+        "ubuntu".to_owned(),
+        "vulkan".to_owned(),
+        "x64".to_owned(),
+    ])
+}
+// TODO: should get user preference for backend and build system from cargo, rather than hard-set
+
+#[derive(Debug, serde::Deserialize)]
+struct Release {
+    pub assets: Vec<ReleaseAsset>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ReleaseAsset {
+    pub name: String,
+    pub browser_download_url: String,
+}
+
+fn release_url(parameters: &[String]) -> Result<String, Box<dyn std::error::Error>> {
+    let release = reqwest::blocking::Client::new()
+        .get("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest")
+        .header("User-Agent", "llamacpp_embed")
+        .send()?
+        .error_for_status()?
+        .json::<Release>()?;
+
+    let mut matched_release: Option<String> = None;
+    for asset in &release.assets {
+        println!("{}", asset.name);
+        let mut missing_some_parameter = false;
+        for paramater in parameters {
+            if !asset.name.contains(paramater) {
+                missing_some_parameter = true;
+                break;
+            }
+        }
+        if missing_some_parameter {
+            continue;
+        }
+        matched_release = Some(asset.browser_download_url.clone());
+        break;
+    }
+
+    match matched_release {
+        Some(url) => return Ok(url),
+        None => return Err("Failed to find proper GitHub release.".to_owned().into()),
+    }
+}
+
+fn get_llama_cpp(url: &str) {
+    let dir_name = "llama-cpp";
     let target_dir = get_project_directory();
     let target_path = Path::new(&target_dir);
-    let output_path = target_path.join(output);
-    if Path::new(&output_path).exists() {
+    let output_dir = target_path.join(&dir_name);
+    if output_dir.exists() {
         return;
     }
-    let client = reqwest::blocking::Client::builder()
-        .timeout(None)
-        .build()
-        .unwrap();
-    let response = client.get(url).send().unwrap();
-    let mut file = File::create(&output_path).unwrap();
-    let content = response.bytes().unwrap();
-    file.write_all(&content).unwrap();
+    if url.ends_with(".tar.gz") {
+        download_file(&url, "llama-cpp.tar.gz");
+        let output_tar = target_path.join("llama-cpp.tar.gz");
+        std::fs::create_dir_all(&output_dir).unwrap();
+        let file = std::fs::File::open(&output_tar).unwrap();
+        let gz = flate2::read::GzDecoder::new(file);
+        let mut archive = tar::Archive::new(gz);
+        archive.unpack(&output_dir).unwrap();
+        std::fs::remove_file(&output_tar).unwrap();
+    } else if url.ends_with(".zip") {
+        download_file(&url, "llama-cpp.zip");
+        let output_zip = target_path.join("llama-cpp.zip");
+        std::fs::create_dir_all(&output_dir).unwrap();
+        let file = std::fs::File::open(&output_zip).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        archive.extract(&output_dir).unwrap();
+        std::fs::remove_file(&output_zip).unwrap();
+    } else {
+        panic!("Unknown file type from URL: {}", url);
+    }
+    rework_subfolder_if_needed(&output_dir);
 }
 
 fn get_project_directory() -> String {
@@ -43,60 +118,46 @@ fn get_project_directory() -> String {
         .to_str()
         .unwrap()
         .to_owned()
-}
+} // TODO: better
 
-#[cfg(target_os = "windows")]
-fn get_llama_names() -> (String, String) {
-    (
-        "llama-windows".into(),
-        "https://github.com/ggml-org/llama.cpp/releases/download/b6209/llama-b6209-bin-win-cuda-12.4-x64.zip".into(),
-    )
-}
-#[cfg(not(target_os = "windows"))]
-fn get_llama_names() -> (String, String) {
-    (
-        "llama-linux".into(),
-        "https://github.com/ggml-org/llama.cpp/releases/download/b8913/llama-b8913-bin-ubuntu-vulkan-x64.tar.gz".into(),
-    )
-}
-
-#[cfg(target_os = "windows")]
-fn get_llama_cpp() {
-    let (dir_name, zip_url) = get_llama_names();
+fn download_file(url: &str, output: &str) {
     let target_dir = get_project_directory();
     let target_path = Path::new(&target_dir);
-    let output_dir = target_path.join(&dir_name);
-    if output_dir.exists() {
+    let output_path = target_path.join(output);
+    if Path::new(&output_path).exists() {
         return;
     }
-    download_file(&zip_url, "llama-cpp.zip");
-    let output_zip = target_path.join("llama-cpp.zip");
-    std::fs::create_dir_all(&output_dir).unwrap();
-    let file = std::fs::File::open(&output_zip).unwrap();
-    let mut archive = zip::ZipArchive::new(file).unwrap();
-    archive.extract(output_dir).unwrap();
-    std::fs::remove_file(&output_zip).unwrap();
+    let client = reqwest::blocking::Client::builder()
+        .timeout(None)
+        .build()
+        .unwrap();
+    let response = client.get(url).send().unwrap();
+    let mut file = File::create(&output_path).unwrap();
+    let content = response.bytes().unwrap();
+    file.write_all(&content).unwrap();
 }
 
-#[cfg(not(target_os = "windows"))]
-fn get_llama_cpp() {
-    use tar::Archive;
-
-    let (dir_name, tar_url) = get_llama_names();
-    let target_dir = get_project_directory();
-    let target_path = Path::new(&target_dir);
-    let output_dir = target_path.join(&dir_name);
-    if output_dir.exists() {
+fn rework_subfolder_if_needed(output_dir: &Path) {
+    if output_dir.join("llama-server").exists() {
         return;
     }
-    download_file(&tar_url, "llama-cpp.tar.gz");
-    let output_tar = target_path.join("llama-cpp.tar.gz");
-    std::fs::create_dir_all(&output_dir).unwrap();
-    let file = std::fs::File::open(&output_tar).unwrap();
-    let gz = flate2::read::GzDecoder::new(file);
-    let mut archive = Archive::new(gz);
-    archive.unpack(output_dir).unwrap();
-    std::fs::remove_file(&output_tar).unwrap();
+
+    let entries: Vec<_> = std::fs::read_dir(output_dir)
+        .unwrap()
+        .map(|e| e.unwrap())
+        .collect();
+
+    if entries.len() == 1 && entries[0].file_type().unwrap().is_dir() {
+        let inner_dir = entries[0].path();
+
+        for entry in std::fs::read_dir(&inner_dir).unwrap() {
+            let entry = entry.unwrap();
+            let dest = output_dir.join(entry.file_name());
+            std::fs::rename(entry.path(), dest).unwrap();
+        }
+
+        std::fs::remove_dir(&inner_dir).unwrap();
+    }
 }
 
 fn make_model_folder() {
@@ -123,12 +184,7 @@ fn copy_deploy_scripts() {
 }
 
 fn inject_gitignore() {
-    let desired_ignores = vec![
-        "/llama-model/*.gguf",
-        "/llama-windows",
-        "/llama-linux",
-        "/deployments",
-    ];
+    let desired_ignores = vec!["/llama-model/*.gguf", "/llama-cpp", "/deployments"];
     let target_dir = get_project_directory();
     let target_path = Path::new(&target_dir);
     let ignore_path = target_path.join(".gitignore");
