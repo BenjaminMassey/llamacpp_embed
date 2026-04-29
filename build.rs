@@ -185,7 +185,12 @@ fn copy_deploy_scripts() {
 }
 
 fn inject_gitignore() {
-    let desired_ignores = vec!["/llama-model/*.gguf", "/llama-cpp", "/deployments"];
+    let desired_ignores = vec![
+        "/llama-model/*.gguf",
+        "/llama-cpp",
+        "/deployments",
+        "llamacpp_log.txt",
+    ];
     let target_dir = get_project_directory();
     let target_path = Path::new(&target_dir);
     let ignore_path = target_path.join(".gitignore");
