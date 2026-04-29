@@ -6,6 +6,17 @@ pub struct LlamaEmbedModel {
     image_capable: bool,
 }
 
+pub struct LlamaEmbedChat {
+    pub response: String,
+    pub messages: Vec<Message>,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct Message {
+    pub role: String,
+    pub content: String,
+}
+
 #[cfg(target_os = "windows")]
 fn llama_cli_path() -> String {
     "./llama-cpp/llama-server.exe".to_owned()
@@ -60,8 +71,9 @@ pub fn start(
 pub fn chat(
     model: &mut LlamaEmbedModel,
     prompt: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
-    llama::chat(&model.system_prompt, prompt)
+    prev_messages: Option<&[Message]>,
+) -> Result<LlamaEmbedChat, Box<dyn std::error::Error>> {
+    llama::chat(&model.system_prompt, prompt, prev_messages)
 }
 
 pub fn chat_with_image(

@@ -1,3 +1,5 @@
+use crate::LlamaEmbedChat;
+use crate::Message;
 use base64::Engine;
 
 pub fn is_ready() -> bool {
@@ -15,12 +17,6 @@ struct ChatRequest {
     model: String,
     messages: Vec<Message>,
 }
-#[derive(serde::Serialize)]
-struct Message {
-    role: String,
-    content: String,
-}
-
 #[derive(serde::Deserialize)]
 struct ChatResponse {
     choices: Vec<Choice>,
@@ -36,21 +32,29 @@ struct ResponseMessage {
 pub fn chat(
     system_message: &str,
     user_message: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+    prev_messages: Option<&[Message]>,
+) -> Result<LlamaEmbedChat, Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::new();
+
+    let mut chat_messages = if let Some(messages) = prev_messages {
+        messages.to_owned()
+    } else {
+        vec![]
+    };
+    chat_messages.push(Message {
+        role: "user".to_string(),
+        content: user_message.to_owned(),
+    });
+
+    let mut all_messages = vec![Message {
+        role: "system".to_string(),
+        content: system_message.to_owned(),
+    }];
+    all_messages.append(&mut chat_messages.clone());
 
     let request = ChatRequest {
         model: "default".to_string(),
-        messages: vec![
-            Message {
-                role: "system".to_string(),
-                content: system_message.to_owned(),
-            },
-            Message {
-                role: "user".to_string(),
-                content: user_message.to_owned(),
-            },
-        ],
+        messages: all_messages.clone(),
     };
 
     let chat_response: ChatResponse = client
@@ -63,7 +67,10 @@ pub fn chat(
         return Err("Server returned no choices.".into());
     }
 
-    Ok(chat_response.choices[0].message.content.clone())
+    Ok(LlamaEmbedChat {
+        response: chat_response.choices[0].message.content.clone(),
+        messages: chat_messages,
+    })
 }
 
 #[derive(serde::Serialize)]
