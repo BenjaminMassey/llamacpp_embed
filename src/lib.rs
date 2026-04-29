@@ -17,16 +17,20 @@ pub fn start(
     mmproj_path: Option<&str>,
     system_prompt: &str,
     load_timeout: u64,
+    allow_thinking: bool,
 ) -> Result<LlamaEmbedModel, Box<dyn std::error::Error>> {
     if !std::path::Path::new(gguf_path).exists() {
         return Err(format!("Model not found: \"{}\".", gguf_path).into());
     }
 
-    let args = if let Some(mmproj) = mmproj_path {
-        vec!["-m", gguf_path, "--mmproj", mmproj, "--port", "8080"]
-    } else {
-        vec!["-m", gguf_path, "--port", "8080"]
-    };
+    let mut args = vec!["-m", gguf_path, "--port", "8080"];
+    if let Some(mmproj) = mmproj_path {
+        args.append(&mut vec!["--mmproj", mmproj]);
+    }
+    if !allow_thinking {
+        args.append(&mut vec!["--reasoning-budget", "0"]);
+    }
+
     let log = std::fs::File::create("llamacpp_log.txt").unwrap();
     let program = std::process::Command::new(
         &std::path::Path::new(&llama::server_path())
