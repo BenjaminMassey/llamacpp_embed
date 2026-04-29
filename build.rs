@@ -3,12 +3,23 @@ use std::io::Write;
 use std::path::Path;
 
 fn main() {
+    let output_dir = get_output_dir();
+    if output_dir.exists() {
+        return;
+    }
     let url = get_release_url().unwrap();
-    get_llama_cpp(&url);
+    get_llama_cpp(&url, &output_dir);
     make_model_folder();
     copy_deploy_scripts();
     inject_gitignore();
     println!("cargo:rerun-if-changed=*");
+}
+
+fn get_output_dir() -> std::path::PathBuf {
+    let dir_name = "llama-cpp";
+    let target_dir = get_project_directory();
+    let target_path = Path::new(&target_dir);
+    target_path.join(&dir_name)
 }
 
 #[cfg(target_os = "windows")]
@@ -71,27 +82,20 @@ fn release_url(parameters: &[String]) -> Result<String, Box<dyn std::error::Erro
     }
 }
 
-fn get_llama_cpp(url: &str) {
-    let dir_name = "llama-cpp";
-    let target_dir = get_project_directory();
-    let target_path = Path::new(&target_dir);
-    let output_dir = target_path.join(&dir_name);
-    if output_dir.exists() {
-        return;
-    }
+fn get_llama_cpp(url: &str, output_dir: &std::path::PathBuf) {
     if url.ends_with(".tar.gz") {
-        download_file(&url, "llama-cpp.tar.gz");
-        let output_tar = target_path.join("llama-cpp.tar.gz");
         std::fs::create_dir_all(&output_dir).unwrap();
+        let output_tar = output_dir.join("llama-cpp.tar.gz");
+        download_file(&url, &output_tar);
         let file = std::fs::File::open(&output_tar).unwrap();
         let gz = flate2::read::GzDecoder::new(file);
         let mut archive = tar::Archive::new(gz);
         archive.unpack(&output_dir).unwrap();
         std::fs::remove_file(&output_tar).unwrap();
     } else if url.ends_with(".zip") {
-        download_file(&url, "llama-cpp.zip");
-        let output_zip = target_path.join("llama-cpp.zip");
         std::fs::create_dir_all(&output_dir).unwrap();
+        let output_zip = output_dir.join("llama-cpp.zip");
+        download_file(&url, &output_zip);
         let file = std::fs::File::open(&output_zip).unwrap();
         let mut archive = zip::ZipArchive::new(file).unwrap();
         archive.extract(&output_dir).unwrap();
@@ -120,11 +124,8 @@ fn get_project_directory() -> String {
         .to_owned()
 } // TODO: better
 
-fn download_file(url: &str, output: &str) {
-    let target_dir = get_project_directory();
-    let target_path = Path::new(&target_dir);
-    let output_path = target_path.join(output);
-    if Path::new(&output_path).exists() {
+fn download_file(url: &str, output_path: &std::path::PathBuf) {
+    if output_path.exists() {
         return;
     }
     let client = reqwest::blocking::Client::builder()
