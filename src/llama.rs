@@ -123,12 +123,10 @@ pub struct ImageUrl {
 pub fn chat_with_image(
     system_message: &str,
     user_message: &str,
-    image_path: &std::path::Path,
+    image_data: String,
     prev_messages: Option<&[VisionMessage]>,
 ) -> Result<LlamaEmbedImageChat, Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::new();
-
-    let data_url = image_to_data_url(image_path);
 
     let mut chat_messages = if let Some(messages) = prev_messages {
         messages.to_owned()
@@ -142,7 +140,7 @@ pub fn chat_with_image(
                 text: user_message.to_owned(),
             },
             ContentPart::ImageUrl {
-                image_url: ImageUrl { url: data_url },
+                image_url: ImageUrl { url: image_data },
             },
         ],
     });
@@ -173,7 +171,7 @@ pub fn chat_with_image(
     })
 }
 
-pub fn image_to_data_url(image_path: &std::path::Path) -> String {
+pub fn image_path_to_url(image_path: &std::path::Path) -> String {
     let image_bytes = std::fs::read(image_path).unwrap();
     let mime = match std::path::Path::new(image_path)
         .extension()
@@ -187,6 +185,10 @@ pub fn image_to_data_url(image_path: &std::path::Path) -> String {
         Some("jpg") | Some("jpeg") | _ => "image/jpeg",
     };
 
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&image_bytes);
+    image_bytes_to_url(&image_bytes, mime)
+}
+
+pub fn image_bytes_to_url(bytes: &[u8], mime: &str) -> String {
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     format!("data:{};base64,{}", mime, b64)
 }

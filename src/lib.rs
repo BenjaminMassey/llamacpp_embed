@@ -6,6 +6,8 @@ pub use self::llama::LlamaEmbedChat;
 pub use self::llama::LlamaEmbedImageChat;
 pub use self::llama::Message;
 pub use self::llama::VisionMessage;
+pub use self::llama::image_bytes_to_url;
+pub use self::llama::image_path_to_url;
 
 pub struct LlamaEmbedModel {
     program: std::process::Child,
@@ -69,7 +71,7 @@ pub fn chat(
     llama::chat(&model.system_prompt, prompt, prev_messages)
 }
 
-pub fn chat_with_image(
+pub fn chat_with_image_path(
     model: &mut LlamaEmbedModel,
     prompt: &str,
     image_path: &std::path::Path,
@@ -78,15 +80,34 @@ pub fn chat_with_image(
     if !model.image_capable {
         return Err("llamacpp_embed::start(..) was not provided with an MMPROJ file.".into());
     }
-    llama::chat_with_image(&model.system_prompt, prompt, image_path, prev_messages)
+    llama::chat_with_image(
+        &model.system_prompt,
+        prompt,
+        llama::image_path_to_url(image_path),
+        prev_messages,
+    )
+}
+
+pub fn chat_with_image_bytes(
+    model: &mut LlamaEmbedModel,
+    prompt: &str,
+    image_bytes: &[u8],
+    mime_type: &str,
+    prev_messages: Option<&[VisionMessage]>,
+) -> Result<LlamaEmbedImageChat, Box<dyn std::error::Error>> {
+    if !model.image_capable {
+        return Err("llamacpp_embed::start(..) was not provided with an MMPROJ file.".into());
+    }
+    llama::chat_with_image(
+        &model.system_prompt,
+        prompt,
+        llama::image_bytes_to_url(image_bytes, mime_type),
+        prev_messages,
+    )
 }
 
 pub fn stop(model: &mut LlamaEmbedModel) -> Result<(), Box<dyn std::error::Error>> {
     model.program.kill()?;
     model.program.wait()?;
     Ok(())
-}
-
-pub fn data_url(image_path: &std::path::Path) -> String {
-    llama::image_to_data_url(image_path)
 }
