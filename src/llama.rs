@@ -83,8 +83,14 @@ pub fn chat(
         return Err("Server returned no choices.".into());
     }
 
+    let response = chat_response.choices[0].message.content.clone();
+    chat_messages.push(Message {
+        role: "assistant".to_string(),
+        content: response.clone(),
+    });
+
     Ok(LlamaEmbedChat {
-        response: chat_response.choices[0].message.content.clone(),
+        response,
         messages: chat_messages,
     })
 }
@@ -165,8 +171,14 @@ pub fn chat_with_image(
         return Err("Server returned no choices.".into());
     }
 
+    let response = chat_response.choices[0].message.content.clone();
+    chat_messages.push(VisionMessage::Text {
+        role: "assistant".to_string(),
+        content: response.clone(),
+    });
+
     Ok(LlamaEmbedImageChat {
-        response: chat_response.choices[0].message.content.clone(),
+        response,
         messages: chat_messages,
     })
 }
