@@ -20,7 +20,7 @@ fn main() {
         None, // optional mmproj path for vision
         "You are a helpful assistant.",
         30,   // load timeout
-        true, // whether to allow "thinking"
+        None, // optional reasoning budget
     )
     .unwrap();
     let prompt = "How can I write \"Hello, World!\" in Rust?";

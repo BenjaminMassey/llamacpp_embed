@@ -19,7 +19,7 @@ pub fn start(
     mmproj_path: Option<&str>,
     system_prompt: &str,
     load_timeout: u64,
-    allow_thinking: bool,
+    reasoning_budget: Option<u64>,
 ) -> Result<LlamaEmbedModel, Box<dyn std::error::Error>> {
     if !std::path::Path::new(gguf_path).exists() {
         return Err(format!("Model not found: \"{}\".", gguf_path).into());
@@ -29,8 +29,10 @@ pub fn start(
     if let Some(mmproj) = mmproj_path {
         args.append(&mut vec!["--mmproj", mmproj]);
     }
-    if !allow_thinking {
-        args.append(&mut vec!["--reasoning-budget", "0"]);
+    let budget_str;
+    if let Some(budget) = reasoning_budget {
+        budget_str = budget.to_string();
+        args.append(&mut vec!["--reasoning-budget", &budget_str]);
     }
 
     let log = std::fs::File::create("llamacpp_log.txt").unwrap();

@@ -50,7 +50,7 @@ pub fn chat(
     user_message: &str,
     prev_messages: Option<&[Message]>,
 ) -> Result<LlamaEmbedChat, Box<dyn std::error::Error>> {
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::builder().build().unwrap();
 
     let mut chat_messages = if let Some(messages) = prev_messages {
         messages.to_owned()
@@ -126,7 +126,7 @@ pub fn chat_with_image(
     image_data: String,
     prev_messages: Option<&[VisionMessage]>,
 ) -> Result<LlamaEmbedImageChat, Box<dyn std::error::Error>> {
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::builder().build().unwrap();
 
     let mut chat_messages = if let Some(messages) = prev_messages {
         messages.to_owned()
