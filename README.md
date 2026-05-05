@@ -22,10 +22,17 @@ fn main() {
         30,   // load timeout
         None, // optional reasoning budget
         None, // server port: defaults to 8080
+        None, // number of parallel context threads
+        None, // explicit amount of context memory
     )
     .unwrap();
     let prompt = "How can I write \"Hello, World!\" in Rust?";
-    let result = llamacpp_embed::chat(&mut model, prompt, None);
+    let result = llamacpp_embed::chat(
+        &mut model,
+        prompt,
+        None, // previous messages, for conversations
+        None, // id slot, for parallel context threads
+    );
     println!("{}\n\n=>\n\n{}", prompt, result.unwrap().response);
     llamacpp_embed::stop(&mut model).unwrap();
 }

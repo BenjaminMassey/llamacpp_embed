@@ -32,6 +32,7 @@ pub struct Message {
 struct ChatRequest {
     model: String,
     messages: Vec<Message>,
+    id_slot: u64,
 }
 #[derive(serde::Deserialize)]
 struct ChatResponse {
@@ -50,6 +51,7 @@ pub fn chat(
     user_message: &str,
     prev_messages: Option<&[Message]>,
     port: &str,
+    id_slot: Option<u64>,
 ) -> Result<LlamaEmbedChat, Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::builder().build().unwrap();
 
@@ -72,6 +74,7 @@ pub fn chat(
     let request = ChatRequest {
         model: "default".to_string(),
         messages: all_messages,
+        id_slot: id_slot.unwrap_or(0),
     };
 
     let chat_response: ChatResponse = client
@@ -117,6 +120,7 @@ pub enum VisionMessage {
 struct VisionChatRequest {
     model: String,
     messages: Vec<VisionMessage>,
+    id_slot: u64,
 }
 #[derive(Clone, serde::Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -134,6 +138,7 @@ pub fn chat_with_image(
     image_data: String,
     prev_messages: Option<&[VisionMessage]>,
     port: &str,
+    id_slot: Option<u64>,
 ) -> Result<LlamaEmbedImageChat, Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::builder().build().unwrap();
 
@@ -163,6 +168,7 @@ pub fn chat_with_image(
     let request = VisionChatRequest {
         model: "default".to_string(),
         messages: all_messages,
+        id_slot: id_slot.unwrap_or(0),
     };
 
     let chat_response: ChatResponse = client

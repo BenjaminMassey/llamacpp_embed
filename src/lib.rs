@@ -22,6 +22,8 @@ pub fn start(
     load_timeout: u64,
     reasoning_budget: Option<u64>,
     server_port: Option<u64>,
+    parallel_count: Option<u64>,
+    context_size: Option<u64>,
 ) -> Result<LlamaEmbedModel, Box<dyn std::error::Error>> {
     if !std::path::Path::new(gguf_path).exists() {
         return Err(format!("Model not found: \"{}\".", gguf_path).into());
@@ -42,6 +44,16 @@ pub fn start(
     if let Some(budget) = reasoning_budget {
         budget_str = budget.to_string();
         args.append(&mut vec!["--reasoning-budget", &budget_str]);
+    }
+    let parallel_str;
+    if let Some(parallel) = parallel_count {
+        parallel_str = parallel.to_string();
+        args.append(&mut vec!["-np", &parallel_str]);
+    }
+    let context_str;
+    if let Some(context) = context_size {
+        context_str = context.to_string();
+        args.append(&mut vec!["-c", &context_str]);
     }
 
     let log = std::fs::File::create("llamacpp_log.txt").unwrap();
@@ -79,8 +91,15 @@ pub fn chat(
     model: &mut LlamaEmbedModel,
     prompt: &str,
     prev_messages: Option<&[Message]>,
+    id_slot: Option<u64>,
 ) -> Result<LlamaEmbedChat, Box<dyn std::error::Error>> {
-    llama::chat(&model.system_prompt, prompt, prev_messages, &model.port)
+    llama::chat(
+        &model.system_prompt,
+        prompt,
+        prev_messages,
+        &model.port,
+        id_slot,
+    )
 }
 
 pub fn chat_with_image_path(
@@ -88,6 +107,7 @@ pub fn chat_with_image_path(
     prompt: &str,
     image_path: &std::path::Path,
     prev_messages: Option<&[VisionMessage]>,
+    id_slot: Option<u64>,
 ) -> Result<LlamaEmbedImageChat, Box<dyn std::error::Error>> {
     if !model.image_capable {
         return Err("llamacpp_embed::start(..) was not provided with an MMPROJ file.".into());
@@ -98,6 +118,7 @@ pub fn chat_with_image_path(
         llama::image_path_to_url(image_path),
         prev_messages,
         &model.port,
+        id_slot,
     )
 }
 
@@ -107,6 +128,7 @@ pub fn chat_with_image_bytes(
     image_bytes: &[u8],
     mime_type: &str,
     prev_messages: Option<&[VisionMessage]>,
+    id_slot: Option<u64>,
 ) -> Result<LlamaEmbedImageChat, Box<dyn std::error::Error>> {
     if !model.image_capable {
         return Err("llamacpp_embed::start(..) was not provided with an MMPROJ file.".into());
@@ -117,6 +139,7 @@ pub fn chat_with_image_bytes(
         llama::image_bytes_to_url(image_bytes, mime_type),
         prev_messages,
         &model.port,
+        id_slot,
     )
 }
 
