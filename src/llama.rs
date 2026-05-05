@@ -49,6 +49,7 @@ pub fn chat(
     system_message: &str,
     user_message: &str,
     prev_messages: Option<&[Message]>,
+    port: &str,
 ) -> Result<LlamaEmbedChat, Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::builder().build().unwrap();
 
@@ -74,7 +75,8 @@ pub fn chat(
     };
 
     let chat_response: ChatResponse = client
-        .post("http://localhost:8080/v1/chat/completions")
+        .post(format!("http://localhost:{}/v1/chat/completions", port))
+        .timeout(std::time::Duration::from_secs(300))
         .json(&request)
         .send()?
         .json()?;
@@ -131,6 +133,7 @@ pub fn chat_with_image(
     user_message: &str,
     image_data: String,
     prev_messages: Option<&[VisionMessage]>,
+    port: &str,
 ) -> Result<LlamaEmbedImageChat, Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::builder().build().unwrap();
 
@@ -163,7 +166,8 @@ pub fn chat_with_image(
     };
 
     let chat_response: ChatResponse = client
-        .post("http://localhost:8080/v1/chat/completions")
+        .post(format!("http://localhost:{}/v1/chat/completions", port))
+        .timeout(std::time::Duration::from_secs(300))
         .json(&request)
         .send()?
         .json()?;

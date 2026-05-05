@@ -13,6 +13,7 @@ pub struct LlamaEmbedModel {
     program: std::process::Child,
     system_prompt: String,
     image_capable: bool,
+    port: String,
 }
 pub fn start(
     gguf_path: &str,
@@ -20,12 +21,20 @@ pub fn start(
     system_prompt: &str,
     load_timeout: u64,
     reasoning_budget: Option<u64>,
+    server_port: Option<u64>,
 ) -> Result<LlamaEmbedModel, Box<dyn std::error::Error>> {
     if !std::path::Path::new(gguf_path).exists() {
         return Err(format!("Model not found: \"{}\".", gguf_path).into());
     }
 
-    let mut args = vec!["-m", gguf_path, "--port", "8080"];
+    let port = if let Some(given_port) = server_port {
+        given_port
+    } else {
+        8080
+    }
+    .to_string();
+
+    let mut args = vec!["-m", gguf_path, "--port", &port];
     if let Some(mmproj) = mmproj_path {
         args.append(&mut vec!["--mmproj", mmproj]);
     }
@@ -62,6 +71,7 @@ pub fn start(
         program,
         system_prompt: system_prompt.to_owned(),
         image_capable: mmproj_path.is_some(),
+        port,
     })
 }
 
@@ -70,7 +80,7 @@ pub fn chat(
     prompt: &str,
     prev_messages: Option<&[Message]>,
 ) -> Result<LlamaEmbedChat, Box<dyn std::error::Error>> {
-    llama::chat(&model.system_prompt, prompt, prev_messages)
+    llama::chat(&model.system_prompt, prompt, prev_messages, &model.port)
 }
 
 pub fn chat_with_image_path(
@@ -87,6 +97,7 @@ pub fn chat_with_image_path(
         prompt,
         llama::image_path_to_url(image_path),
         prev_messages,
+        &model.port,
     )
 }
 
@@ -105,6 +116,7 @@ pub fn chat_with_image_bytes(
         prompt,
         llama::image_bytes_to_url(image_bytes, mime_type),
         prev_messages,
+        &model.port,
     )
 }
 

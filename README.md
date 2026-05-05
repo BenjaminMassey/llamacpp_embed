@@ -21,6 +21,7 @@ fn main() {
         "You are a helpful assistant.",
         30,   // load timeout
         None, // optional reasoning budget
+        None, // server port: defaults to 8080
     )
     .unwrap();
     let prompt = "How can I write \"Hello, World!\" in Rust?";
