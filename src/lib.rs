@@ -25,6 +25,7 @@ pub struct LlamaEmbedBuilder {
     server_port: u64,
     parallel_count: Option<u64>,
     context_size: Option<u64>,
+    disable_gpu: bool,
 }
 
 impl LlamaEmbedBuilder {
@@ -38,6 +39,7 @@ impl LlamaEmbedBuilder {
             server_port: 8080,
             parallel_count: None,
             context_size: None,
+            disable_gpu: false,
         }
     }
 
@@ -76,6 +78,11 @@ impl LlamaEmbedBuilder {
         self
     }
 
+    pub fn with_disable_gpu(mut self, disable_gpu: bool) -> Self {
+        self.disable_gpu = disable_gpu;
+        self
+    }
+
     pub fn build(self) -> Result<LlamaEmbedModel, Box<dyn std::error::Error>> {
         if !std::path::Path::new(&self.gguf_path).exists() {
             return Err(format!("Model not found: \"{}\".", self.gguf_path).into());
@@ -105,6 +112,10 @@ impl LlamaEmbedBuilder {
         if let Some(context) = self.context_size {
             context_str = context.to_string();
             args.append(&mut vec!["-c", &context_str]);
+        }
+
+        if self.disable_gpu {
+            args.append(&mut vec!["-ngl", "0"]);
         }
 
         let log = std::fs::File::create("llamacpp_log.txt").unwrap();
