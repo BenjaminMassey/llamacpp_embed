@@ -148,7 +148,14 @@ impl LlamaEmbedBuilder {
 
     fn compiled_args(&self) -> Vec<String> {
         let port = &self.server_port.to_string();
-        let mut args = vec!["-m", &self.gguf_path, "--port", port];
+        let mut args = vec![
+            "-m",
+            &self.gguf_path,
+            "--port",
+            port,
+            "--host",
+            &self.server_address,
+        ];
 
         let mmproj_str = self.mmproj_path.as_deref().unwrap_or_default().to_owned();
         if self.mmproj_path.is_some() {
