@@ -10,7 +10,7 @@ pub use self::llama::image_bytes_to_url;
 pub use self::llama::image_path_to_url;
 
 pub struct LlamaEmbedModel {
-    program: std::process::Child,
+    program: Option<std::process::Child>,
     system_prompt: String,
     image_capable: bool,
     port: String,
@@ -26,12 +26,13 @@ pub struct LlamaEmbedBuilder {
     parallel_count: Option<u64>,
     context_size: Option<u64>,
     disable_gpu: bool,
+    client_only: bool,
 }
 
 impl LlamaEmbedBuilder {
-    pub fn new(gguf_path: &str) -> Self {
+    pub fn new() -> Self {
         LlamaEmbedBuilder {
-            gguf_path: gguf_path.to_owned(),
+            gguf_path: String::new(),
             mmproj_path: None,
             system_prompt: "You are a helpful asssitant.".to_owned(),
             load_timeout: 60,
@@ -40,7 +41,13 @@ impl LlamaEmbedBuilder {
             parallel_count: None,
             context_size: None,
             disable_gpu: false,
+            client_only: false,
         }
+    }
+
+    pub fn with_model(mut self, gguf_path: &str) -> Self {
+        self.gguf_path = gguf_path.to_owned();
+        self
     }
 
     pub fn with_mmproj(mut self, mmproj_path: &str) -> Self {
@@ -83,13 +90,55 @@ impl LlamaEmbedBuilder {
         self
     }
 
+    pub fn with_client_only(mut self, client_only: bool) -> Self {
+        self.client_only = client_only;
+        self
+    }
+
     pub fn build(self) -> Result<LlamaEmbedModel, Box<dyn std::error::Error>> {
-        if !std::path::Path::new(&self.gguf_path).exists() {
-            return Err(format!("Model not found: \"{}\".", self.gguf_path).into());
+        let mut program: Option<std::process::Child> = None;
+
+        if !self.client_only {
+            if !std::path::Path::new(&self.gguf_path).exists() {
+                return Err(format!("Model not found: \"{}\".", self.gguf_path).into());
+            }
+            let log = std::fs::File::create("llamacpp_log.txt").unwrap();
+            program = Some(
+                std::process::Command::new(
+                    std::path::Path::new(&llama::server_path())
+                        .to_str()
+                        .unwrap(),
+                )
+                .args(&self.compiled_args())
+                .stdout(log.try_clone().unwrap())
+                .stderr(log)
+                .spawn()?,
+            );
         }
 
-        let port = self.server_port.to_string();
-        let mut args = vec!["-m", &self.gguf_path, "--port", &port];
+        let load_start = std::time::Instant::now();
+        while !llama::is_ready() {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            if std::time::Instant::now()
+                .duration_since(load_start)
+                .as_secs()
+                >= self.load_timeout
+            {
+                return Err(format!("Reached \"load_timeout\" of {}.", self.load_timeout).into());
+            }
+        }
+
+        Ok(LlamaEmbedModel {
+            program,
+            system_prompt: self.system_prompt,
+            image_capable: self.mmproj_path.is_some() || self.client_only,
+            port: self.server_port.to_string(),
+        })
+    }
+
+    fn compiled_args(&self) -> Vec<String> {
+        let port = &self.server_port.to_string();
+        let mut args = vec!["-m", &self.gguf_path, "--port", port];
 
         let mmproj_str = self.mmproj_path.as_deref().unwrap_or_default().to_owned();
         if self.mmproj_path.is_some() {
@@ -118,35 +167,7 @@ impl LlamaEmbedBuilder {
             args.append(&mut vec!["-ngl", "0"]);
         }
 
-        let log = std::fs::File::create("llamacpp_log.txt").unwrap();
-        let program = std::process::Command::new(
-            std::path::Path::new(&llama::server_path())
-                .to_str()
-                .unwrap(),
-        )
-        .args(&args)
-        .stdout(log.try_clone().unwrap())
-        .stderr(log)
-        .spawn()?;
-
-        let load_start = std::time::Instant::now();
-        while !llama::is_ready() {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            if std::time::Instant::now()
-                .duration_since(load_start)
-                .as_secs()
-                >= self.load_timeout
-            {
-                return Err(format!("Reached \"load_timeout\" of {}.", self.load_timeout).into());
-            }
-        }
-
-        Ok(LlamaEmbedModel {
-            program,
-            system_prompt: self.system_prompt,
-            image_capable: self.mmproj_path.is_some(),
-            port,
-        })
+        args.iter().map(|s| s.to_owned().to_owned()).collect()
     }
 }
 
@@ -211,7 +232,10 @@ pub fn chat_with_image_bytes(
 }
 
 pub fn stop(model: &mut LlamaEmbedModel) -> Result<(), Box<dyn std::error::Error>> {
-    model.program.kill()?;
-    model.program.wait()?;
+    if model.program.is_some() {
+        let program = model.program.as_mut().unwrap();
+        program.kill()?;
+        program.wait()?;
+    }
     Ok(())
 }

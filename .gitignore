@@ -4,3 +4,4 @@ target/
 /llama-linux
 /deployments
 /llama-cpp
+llamacpp_log.txt

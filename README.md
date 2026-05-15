@@ -15,11 +15,11 @@ llamacpp_embed = { git = "https://www.github.com/BenjaminMassey/llamacpp_embed" 
 
 ```rust
 fn main() {
-    let mut model = llamacpp_embed::LlamaEmbedBuilder::new(
-      "./llama-model/model.gguf"
-    )
-    .build()
-    .unwrap();
+
+    let mut model = llamacpp_embed::LlamaEmbedBuilder::new()
+        .with_model("./llama-model/model.gguf")
+        .build()
+        .unwrap();
     let prompt = "How can I write \"Hello, World!\" in Rust?";
     let result = llamacpp_embed::chat(
         &mut model,
