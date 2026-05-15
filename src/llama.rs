@@ -9,8 +9,8 @@ pub fn server_path() -> String {
     "./llama-cpp/llama-server".to_owned()
 }
 
-pub fn is_ready() -> bool {
-    if let Ok(resp) = reqwest::blocking::get("http://localhost:8080/health") {
+pub fn is_ready(health_url: &str) -> bool {
+    if let Ok(resp) = reqwest::blocking::get(health_url) {
         let json: Result<serde_json::Value, _> = resp.json();
         if let Ok(data) = json {
             return data["status"] == "ok";
@@ -50,6 +50,7 @@ pub fn chat(
     system_message: &str,
     user_message: &str,
     prev_messages: Option<&[Message]>,
+    address: &str,
     port: &str,
     id_slot: Option<u64>,
 ) -> Result<LlamaEmbedChat, Box<dyn std::error::Error>> {
@@ -78,7 +79,7 @@ pub fn chat(
     };
 
     let chat_response: ChatResponse = client
-        .post(format!("http://localhost:{}/v1/chat/completions", port))
+        .post(format!("http://{}:{}/v1/chat/completions", address, port))
         .timeout(std::time::Duration::from_secs(300))
         .json(&request)
         .send()?
@@ -137,6 +138,7 @@ pub fn chat_with_image(
     user_message: &str,
     image_data: String,
     prev_messages: Option<&[VisionMessage]>,
+    address: &str,
     port: &str,
     id_slot: Option<u64>,
 ) -> Result<LlamaEmbedImageChat, Box<dyn std::error::Error>> {
@@ -172,7 +174,7 @@ pub fn chat_with_image(
     };
 
     let chat_response: ChatResponse = client
-        .post(format!("http://localhost:{}/v1/chat/completions", port))
+        .post(format!("http://{}:{}/v1/chat/completions", address, port))
         .timeout(std::time::Duration::from_secs(300))
         .json(&request)
         .send()?

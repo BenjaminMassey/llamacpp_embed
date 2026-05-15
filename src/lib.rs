@@ -13,6 +13,7 @@ pub struct LlamaEmbedModel {
     program: Option<std::process::Child>,
     system_prompt: String,
     image_capable: bool,
+    address: String,
     port: String,
 }
 
@@ -22,6 +23,7 @@ pub struct LlamaEmbedBuilder {
     system_prompt: String,
     load_timeout: u64,
     reasoning_budget: Option<u64>,
+    server_address: String,
     server_port: u64,
     parallel_count: Option<u64>,
     context_size: Option<u64>,
@@ -37,6 +39,7 @@ impl LlamaEmbedBuilder {
             system_prompt: "You are a helpful asssitant.".to_owned(),
             load_timeout: 60,
             reasoning_budget: None,
+            server_address: "127.0.0.1".to_owned(),
             server_port: 8080,
             parallel_count: None,
             context_size: None,
@@ -67,6 +70,11 @@ impl LlamaEmbedBuilder {
 
     pub fn with_reasoning_budget(mut self, reasoning_budget: u64) -> Self {
         self.reasoning_budget = Some(reasoning_budget);
+        self
+    }
+
+    pub fn with_address(mut self, address: &str) -> Self {
+        self.server_address = address.to_owned();
         self
     }
 
@@ -116,8 +124,9 @@ impl LlamaEmbedBuilder {
             );
         }
 
+        let url = format!("http://{}:{}/health", self.server_address, self.server_port);
         let load_start = std::time::Instant::now();
-        while !llama::is_ready() {
+        while !llama::is_ready(&url) {
             std::thread::sleep(std::time::Duration::from_secs(1));
             if std::time::Instant::now()
                 .duration_since(load_start)
@@ -132,6 +141,7 @@ impl LlamaEmbedBuilder {
             program,
             system_prompt: self.system_prompt,
             image_capable: self.mmproj_path.is_some() || self.client_only,
+            address: self.server_address,
             port: self.server_port.to_string(),
         })
     }
@@ -181,6 +191,7 @@ pub fn chat(
         &model.system_prompt,
         prompt,
         prev_messages,
+        &model.address,
         &model.port,
         id_slot,
     )
@@ -203,6 +214,7 @@ pub fn chat_with_image_path(
         prompt,
         llama::image_path_to_url(image_path),
         prev_messages,
+        &model.address,
         &model.port,
         id_slot,
     )
@@ -226,6 +238,7 @@ pub fn chat_with_image_bytes(
         prompt,
         llama::image_bytes_to_url(image_bytes, mime_type),
         prev_messages,
+        &model.address,
         &model.port,
         id_slot,
     )
