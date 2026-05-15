@@ -15,16 +15,10 @@ llamacpp_embed = { git = "https://www.github.com/BenjaminMassey/llamacpp_embed" 
 
 ```rust
 fn main() {
-    let mut model = llamacpp_embed::start(
-        "./llama-model/model.gguf",
-        None, // optional mmproj path for vision
-        "You are a helpful assistant.",
-        30,   // load timeout
-        None, // optional reasoning budget
-        None, // server port: defaults to 8080
-        None, // number of parallel context threads
-        None, // explicit amount of context memory
+    let mut model = llamacpp_embed::LlamaEmbedBuilder::new(
+      "./llama-model/model.gguf"
     )
+    .build()
     .unwrap();
     let prompt = "How can I write \"Hello, World!\" in Rust?";
     let result = llamacpp_embed::chat(
