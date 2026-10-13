@@ -42,6 +42,8 @@ fn get_release_url() -> Result<String, Box<dyn std::error::Error>> {
 
 #[derive(Debug, serde::Deserialize)]
 struct Release {
+    #[serde(default)]
+    pub draft: bool,
     pub assets: Vec<ReleaseAsset>,
 }
 
@@ -52,34 +54,22 @@ struct ReleaseAsset {
 }
 
 fn release_url(parameters: &[String]) -> Result<String, Box<dyn std::error::Error>> {
-    let release = reqwest::blocking::Client::new()
-        .get("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest")
+    let releases = reqwest::blocking::Client::new()
+        .get("https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10")
         .header("User-Agent", "llamacpp_embed")
         .send()?
         .error_for_status()?
-        .json::<Release>()?;
+        .json::<Vec<Release>>()?;
 
-    let mut matched_release: Option<String> = None;
-    for asset in &release.assets {
-        println!("{}", asset.name);
-        let mut missing_some_parameter = false;
-        for paramater in parameters {
-            if !asset.name.contains(paramater) {
-                missing_some_parameter = true;
-                break;
+    for release in releases.iter().filter(|r| !r.draft) {
+        for asset in &release.assets {
+            if parameters.iter().all(|p| asset.name.contains(p)) {
+                return Ok(asset.browser_download_url.clone());
             }
         }
-        if missing_some_parameter {
-            continue;
-        }
-        matched_release = Some(asset.browser_download_url.clone());
-        break;
     }
 
-    match matched_release {
-        Some(url) => return Ok(url),
-        None => return Err("Failed to find proper GitHub release.".to_owned().into()),
-    }
+    Err("Failed to find proper GitHub release.".to_owned().into())
 }
 
 fn get_llama_cpp(url: &str, output_dir: &std::path::PathBuf) {
